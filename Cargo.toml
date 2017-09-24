@@ -1,0 +1,7 @@
+[package]
+name = "baffles"
+version = "0.1.0"
+authors = ["John VanEnk <sw17ch@gmail.com>"]
+
+[dependencies]
+rand = "0.3"
