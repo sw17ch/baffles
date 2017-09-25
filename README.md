@@ -9,18 +9,13 @@ reduce the strength of airborne sound. Similarly, a major use of Bloom
 filters has historically been to reduce the number I/O operations
 required on a disk.
 
-## Blocked Bloom Filter
+## Filters Provided
 
-The implementation for the Blocked Bloom Filter is taken from the
-paper [Cache Efficient Bloom Filters for Shared Memory Machines by
-Tim Kaler](http://tfk.mit.edu/pdf/bloom.pdf).
 
-The goal of a Blocked Bloom Filter is to achieve better cache-related
-performance by dividing the set members evenly among a number of
-Standard Bloom Filters that able to more-easily fit into the machine
-cache.
+### Blocked Bloom Filter
 
-### Example
+See [Cache Efficient Bloom Filters for Shared Memory Machines by Tim
+Kaler](http://tfk.mit.edu/pdf/bloom.pdf).
 
 ```rust
 use baffles::blocked::{BlockedBloom,DefaultBlockedBloom};

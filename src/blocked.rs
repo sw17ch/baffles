@@ -1,3 +1,12 @@
+//! The implementation for the Blocked Bloom Filter is taken from the
+//! paper [Cache Efficient Bloom Filters for Shared Memory Machines by
+//! Tim Kaler](http://tfk.mit.edu/pdf/bloom.pdf).
+//!
+//! The goal of a Blocked Bloom Filter is to achieve better
+//! cache-related performance by dividing the set members evenly among
+//! a number of Standard Bloom Filters that able to more-easily fit
+//! into the machine cache.
+
 use rand::Rng;
 use rand;
 use std::fmt;
@@ -157,6 +166,7 @@ pub struct BlockedBloom<H,T> {
     mask: u64
 }
 
+/// A BlockedBloom filter that uses the DefaultHasher.
 pub type DefaultBlockedBloom<T> = BlockedBloom<std::collections::hash_map::DefaultHasher,T>;
 
 impl<H,T> fmt::Debug for BlockedBloom<H,T> {
