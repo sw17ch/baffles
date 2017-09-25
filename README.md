@@ -23,7 +23,7 @@ cache.
 ### Example
 
 ```rust
-use baffles::{BlockedBloom,DefaultBlockedBloom};
+use baffles::blocked::{BlockedBloom,DefaultBlockedBloom};
 
 let expected_set_size = 1024 * 1024;
 let bits_per_item = 16;
