@@ -10,10 +10,11 @@
 use rand::Rng;
 use rand;
 use std::fmt;
-use std::hash::{Hash,Hasher};
-use std::marker::PhantomData;
+use std::hash::{Hash, Hasher};
 use std;
-use super::bit_array::BitArray;
+use super::standard::StandardBloom;
+use super::index_mask::index_mask;
+use super::hash_until::hash_until;
 
 /// A representation of a BlockedBloom filter.
 ///
@@ -35,9 +36,10 @@ use super::bit_array::BitArray;
 /// dbb.set(&100);
 /// assert!(dbb.get(&100));
 /// ```
-pub struct BlockedBloom<H,T> {
-    /// The blocks in this blocked bloom filter.
-    blocks: Vec<Block<H,T>>,
+pub struct BlockedBloom<H, T> {
+    /// The blocks in this blocked bloom filter are just StandardBloom
+    /// filters.
+    blocks: Vec<StandardBloom<H, T>>,
 
     /// The block-selection hasher seed to use.
     hasher_seed: u64,
@@ -45,16 +47,16 @@ pub struct BlockedBloom<H,T> {
     /// A pre-computed bit-mask that is able to represent the number
     /// of blocks in the filter. This value will probably be larger
     /// than blocks.len().
-    mask: u64
+    mask: u64,
 }
 
-impl<H,T> fmt::Debug for BlockedBloom<H,T> {
+impl<H, T> fmt::Debug for BlockedBloom<H, T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "BlockedBloom {{ blocks: {:?} }}", self.blocks)
     }
 }
 
-impl<H: Hasher + Default, T: Hash> BlockedBloom<H,T> {
+impl<H: Hasher + Default, T: Hash> BlockedBloom<H, T> {
     /// Create a new blocked bloom filter.
     ///
     /// * `n`: estimate of the number of items in the set
@@ -76,6 +78,8 @@ impl<H: Hasher + Default, T: Hash> BlockedBloom<H,T> {
     ///     let m = n * c;
     ///     (1f64 - e.powf((-k * n) / m)).powf(k)
     /// }
+    ///
+    /// assert!(fp(1000.0, 16.0, 4.0) > 0.0);
     /// ```
     pub fn new(n: usize, c: usize, k: usize, b: usize) -> Self {
         assert!(n > 0);
@@ -86,11 +90,10 @@ impl<H: Hasher + Default, T: Hash> BlockedBloom<H,T> {
         // Ideally, N insertions divide evenly into B. The number of
         // bits we use for each B should be (N/B * C).
 
-        let n_per_block = n as f32 / b as f32;
-        let bits_per_block = (n_per_block * c as f32).ceil() as usize;
+        let n_per_block = (n as f32 / b as f32).ceil() as usize;
         let max_block_index = b - 1;
 
-        assert!(bits_per_block >= 1);
+        assert!(n_per_block >= 1);
 
         let mut rng = rand::thread_rng();
 
@@ -98,9 +101,17 @@ impl<H: Hasher + Default, T: Hash> BlockedBloom<H,T> {
             hasher_seed: rng.gen::<u64>(),
             mask: index_mask(max_block_index as u64),
 
-            blocks: (0..b).map (|_| {
-                Block::new(k, rng.gen::<u64>(), rng.gen::<u64>(), bits_per_block)
-            }).collect(),
+            blocks: (0..b)
+                .map(|_| {
+                    StandardBloom::new_with_seeds(
+                        n_per_block,
+                        c,
+                        k,
+                        rng.gen::<u64>(),
+                        rng.gen::<u64>(),
+                    )
+                })
+                .collect(),
         }
     }
 
@@ -112,7 +123,7 @@ impl<H: Hasher + Default, T: Hash> BlockedBloom<H,T> {
     }
 
     /// True if the bits for `item` are already set in the filter.
-    pub fn get(&self, item: &T) -> bool{
+    pub fn get(&self, item: &T) -> bool {
         // Set the bits for the item in the specified block.
         let idx = self.block_idx(item);
         self.blocks[idx].get(item)
@@ -148,185 +159,7 @@ impl<H: Hasher + Default, T: Hash> BlockedBloom<H,T> {
 }
 
 /// A BlockedBloom filter that uses the DefaultHasher.
-pub type DefaultBlockedBloom<T> = BlockedBloom<std::collections::hash_map::DefaultHasher,T>;
-
-struct Block<H,T> {
-    /// The number of hashing functions to use. This also happens to
-    /// be the number of bits that will be set in this block for each
-    /// item.
-    k: usize,
-
-    /// The hashing function seeds to use.
-    seed1: u64,
-    seed2: u64,
-
-    /// The bits in this block.
-    bits: BitArray,
-
-    /// A mask to help select a random bit index.
-    mask: u64,
-
-    _p_hasher: PhantomData<H>,
-    _p_type: PhantomData<T>,
-}
-
-impl<H,T> fmt::Debug for Block<H,T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Block {{ bits: {:?} }}", self.bits)
-    }
-}
-
-impl<H: Hasher + Default, T: Hash> Block<H,T> {
-    /// Create a new block that will use `k` hashing functions,
-    /// `seed1` and `seed2` to derive those hashing functions, and
-    /// space for `bits` bits.
-    fn new(k: usize, seed1: u64, seed2: u64, bits: usize) -> Block<H,T> {
-        assert!(k > 0);
-        assert!(bits > 0);
-
-        let max_bit_index = bits - 1;
-        Block {
-            k: k,
-
-            seed1: seed1,
-            seed2: seed2,
-
-            bits: BitArray::new(bits),
-            mask: index_mask(max_bit_index as u64),
-
-            _p_hasher: PhantomData,
-            _p_type: PhantomData,
-        }
-    }
-
-    /// Create a list of bit indicies representing the bloom filter
-    /// hash for `item`.
-    fn hash(&self, item: &T) -> Vec<usize> {
-        let mut h1: H = Default::default();
-        let mut h2: H = Default::default();
-        h1.write_u64(self.seed1);
-        h2.write_u64(self.seed2);
-
-        item.hash(&mut h1);
-        item.hash(&mut h2);
-
-        let ih1 = h1.finish();
-        let ih2 = h2.finish();
-
-        let mut v = vec![0;self.k];
-        for i in 0..self.k {
-            // A. Kirsch and M. Mitzenmacher describe a way to
-            // generate multiple hashes without having to recompute
-            // every time in their paper "Less Hashing, Same
-            // Performance: Building a Better Bloom Filter" published
-            // September 2008. It's generalized below as:
-            //
-            //    hi = h1 + (i * h2)
-            //
-            // Their paper identifies that this mechanism allows us to
-            // calculate two hashes once, and derive any number of
-            // hashes from those initial two without losing entropy in
-            // each successive hash.
-            //
-            // We generate this k_and_m hash and then test whether or
-            // not it's a suitable candidate for producing a random
-            // bit index. In order to treat all indicies fairly, the
-            // hash is recalculated until masking off the top bits of
-            // the hash produces a number that's less than or equal to
-            // the number of bits in the block.
-
-            // The value for the i'th hash.
-            let k_and_m = ih1.wrapping_add((i as u64).wrapping_mul(ih2));
-
-            // The hasher used for looping.
-            let mut h3: H = Default::default();
-
-            // This will be true when the hash can be used to produce
-            // a random bit index.
-            let prop = |h| (self.mask & h) <= (self.bits.width() - 1) as u64;
-
-            // This hash, when masked, will give us a usable bit
-            // index.
-            let usable_hash = hash_until(&mut h3, k_and_m, prop);
-
-            // Store the bit index into the vector.
-            v[i] = (self.mask & usable_hash) as usize;
-        }
-
-        v
-    }
-
-    /// The bits for `item` in the block.
-    fn set(&mut self, item: &T) {
-        for ix in self.hash(item) {
-            self.bits.set(ix);
-        }
-    }
-
-    /// True if the bits for `item` are already set in the block.
-    fn get(&self, item: &T) -> bool {
-        self.hash(item).iter().all(|ix| self.bits.get(*ix))
-    }
-}
-
-/// Starting with `initial`, continue passing the output of the hasher
-/// into itself until `prop` returns true for one of them.
-fn hash_until<H: Hasher, F: Fn(u64) -> bool>(h: &mut H, initial: u64, prop: F) -> u64 {
-    if prop(initial) {
-        // If the initial hash value already meets our constraint, it
-        // is our result. We don't need to do any more work.
-        initial
-    } else {
-        // If the initial hash value does not meet our constraint, then
-        // we'll create a new hasher and seed it with our initial value.
-        h.write_u64(initial);
-        let mut r = h.finish();
-
-        loop {
-            // Now we'll keep feeding the result of the hash back into
-            // the hasher until we get a value that fits our
-            // constraint.
-            if prop(r) {
-                break;
-            } else {
-                h.write_u64(r);
-                r = h.finish();
-            }
-        }
-
-        r
-    }
-}
-
-#[test]
-fn test_hash_until() {
-    let mut h: std::collections::hash_map::DefaultHasher = Default::default();
-    let prop = |h| (0xFF & h) > 128;
-
-    assert!(129 == hash_until(&mut h, 129, &prop));
-    assert!(128 < (0xFF & hash_until(&mut h, 127, &prop)));
-
-}
-
-/// Calculate a mask suitable for representing all bits of a
-/// value. (There are faster ways to do this, but we don't calculate
-/// this often, so we're using the obvious approach.)
-fn index_mask(value: u64) -> u64 {
-    (1..64)
-        .map(|i| { (1 << i) - 1 })
-        .find(|m| { *m >= value as u64 })
-        .unwrap_or(u64::max_value())
-}
-
-#[test]
-fn test_index_mask() {
-    assert!(u64::max_value() == index_mask(1 << 63));
-    assert!(u64::max_value() == index_mask(10 + (1 << 63)));
-    assert!((1 << 62) - 1 == index_mask((1 << 61) + 424242));
-    assert!(1 == index_mask(0));
-    assert!(1 == index_mask(1));
-    assert!(3 == index_mask(2));
-}
+pub type DefaultBlockedBloom<T> = BlockedBloom<std::collections::hash_map::DefaultHasher, T>;
 
 #[cfg(test)]
 mod tests {
@@ -368,56 +201,59 @@ mod tests {
     }
 
     fn test_n_to_m(bb: &DefaultBlockedBloom<usize>, n: usize, m: usize) -> usize {
-        (n..m).fold(0, |acc, v| {
-            if bb.get(&v) {
-                acc + 1
-            } else {
-                acc
-            }
-        })
+        (n..m).fold(0, |acc, v| if bb.get(&v) { acc + 1 } else { acc })
     }
 
     #[test]
     fn it_should_have_standard_behavior_for_block_count_1() {
-        let mut bb: DefaultBlockedBloom<usize> = BlockedBloom::new(N,C,k(),1);
+        let mut bb: DefaultBlockedBloom<usize> = BlockedBloom::new(N, C, k(), 1);
         insert_n(&mut bb, N);
 
         let fpos = test_n_to_m(&bb, N, N * 2) as f64;
         let n = N as f64;
         let false_positive_rate = fpos / n;
 
-        println!("false positive rate: {:.7}. expected {:.7}.",
-                 false_positive_rate, fp());
+        println!(
+            "false positive rate: {:.7}. expected {:.7}.",
+            false_positive_rate,
+            fp()
+        );
 
         assert!(fp() * 2.0 > false_positive_rate);
     }
 
     #[test]
     fn it_should_have_standard_behavior_for_block_count_16() {
-        let mut bb: BlockedBloom<DefaultHasher,usize> = BlockedBloom::new(N,C,k(),16);
+        let mut bb: BlockedBloom<DefaultHasher, usize> = BlockedBloom::new(N, C, k(), 16);
         insert_n(&mut bb, N);
 
         let fpos = test_n_to_m(&bb, N, N * 2) as f64;
         let n = N as f64;
         let false_positive_rate = fpos / n;
 
-        println!("false positive rate: {:.7}. expected {:.7}.",
-                 false_positive_rate, fp());
+        println!(
+            "false positive rate: {:.7}. expected {:.7}.",
+            false_positive_rate,
+            fp()
+        );
 
         assert!(fp() * 2.0 > false_positive_rate);
     }
 
     #[test]
     fn it_should_have_standard_behavior_for_block_count_500() {
-        let mut bb: BlockedBloom<DefaultHasher,usize> = BlockedBloom::new(N,C,k(),500);
+        let mut bb: BlockedBloom<DefaultHasher, usize> = BlockedBloom::new(N, C, k(), 500);
         insert_n(&mut bb, N);
 
         let fpos = test_n_to_m(&bb, N, N * 2) as f64;
         let n = N as f64;
         let false_positive_rate = fpos / n;
 
-        println!("false positive rate: {:.7}. expected {:.7}.",
-                 false_positive_rate, fp());
+        println!(
+            "false positive rate: {:.7}. expected {:.7}.",
+            false_positive_rate,
+            fp()
+        );
 
         assert!(fp() * 2.0 > false_positive_rate);
     }

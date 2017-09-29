@@ -11,6 +11,27 @@ required on a disk.
 
 ## Filters Provided
 
+### Standard Bloom Filter
+
+This is a no-surprises [Bloom
+Filter](https://en.wikipedia.org/wiki/Bloom_filter).
+
+```rust
+use baffles::standard::{StandardBloom,DefaultStandardBloom};
+
+let expected_set_size = 1024 * 1024;
+let bits_per_item = 16;
+let hashing_algos = (bits_per_item as f32 * 0.7).ceil() as usize;
+
+let mut dbb: DefaultStandardBloom<usize> = StandardBloom::new(
+    expected_set_size,
+    bits_per_item,
+    hashing_algos);
+
+assert!(!dbb.get(&100));
+dbb.set(&100);
+assert!(dbb.get(&100));
+```
 
 ### Blocked Bloom Filter
 
