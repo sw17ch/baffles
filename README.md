@@ -17,7 +17,7 @@ This is a no-surprises [Bloom
 Filter](https://en.wikipedia.org/wiki/Bloom_filter).
 
 ```rust
-use baffles::standard::{StandardBloom,DefaultStandardBloom};
+use baffles::standard::*;
 
 let expected_set_size = 1024 * 1024;
 let bits_per_item = 16;
@@ -39,7 +39,7 @@ See [Cache Efficient Bloom Filters for Shared Memory Machines by Tim
 Kaler](http://tfk.mit.edu/pdf/bloom.pdf).
 
 ```rust
-use baffles::blocked::{BlockedBloom,DefaultBlockedBloom};
+use baffles::blocked::*;
 
 let expected_set_size = 1024 * 1024;
 let bits_per_item = 16;

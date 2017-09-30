@@ -10,14 +10,16 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use std;
-use super::bit_array::BitArray;
-use super::index_mask::index_mask;
-use super::hash_until::hash_until;
+use bit_array::BitArray;
+use index_mask::index_mask;
+use hash_until::hash_until;
+
+pub use bloom::{BloomFilter,BloomFilterCreate};
 
 /// A representation of a StandardBloom filter.
 ///
 /// ```
-/// use baffles::standard::{StandardBloom,DefaultStandardBloom};
+/// use baffles::standard::*;
 ///
 /// let expected_set_size = 1024 * 1024;
 /// let bits_per_item = 16;
@@ -60,15 +62,29 @@ impl<H, T> fmt::Debug for StandardBloom<H, T> {
     }
 }
 
-impl<H: Hasher + Default, T: Hash> StandardBloom<H, T> {
-    pub fn new(n: usize, c: usize, k: usize) -> StandardBloom<H, T> {
+impl<H: Hasher + Default, T: Hash> BloomFilterCreate<T> for StandardBloom<H,T> {
+    fn new(n: usize, c: usize, k: usize) -> Self {
         let mut rng = rand::thread_rng();
         StandardBloom::new_with_seeds(n, c, k, rng.gen::<u64>(), rng.gen::<u64>())
     }
+}
 
-    /// Create a new block that will use `k` hashing functions,
-    /// `seed1` and `seed2` to derive those hashing functions, and
-    /// space for `bits` bits.
+impl<H: Hasher + Default, T: Hash> BloomFilter<T> for StandardBloom<H,T> {
+    fn set(&mut self, item: &T) {
+        for ix in self.hash(item) {
+            self.bits.set(ix);
+        }
+    }
+
+    fn get(&self, item: &T) -> bool {
+        self.hash(item).iter().all(|ix| self.bits.get(*ix))
+    }
+}
+
+impl<H: Hasher + Default, T: Hash> StandardBloom<H, T> {
+    /// Create a new StandardBloom filter that will use `k` hashing
+    /// functions, `seed1` and `seed2` to derive those hashing
+    /// functions, and space for `bits` bits.
     pub fn new_with_seeds(
         n: usize,
         c: usize,
@@ -151,18 +167,6 @@ impl<H: Hasher + Default, T: Hash> StandardBloom<H, T> {
         }
 
         v
-    }
-
-    /// The bits for `item` in the block.
-    pub fn set(&mut self, item: &T) {
-        for ix in self.hash(item) {
-            self.bits.set(ix);
-        }
-    }
-
-    /// True if the bits for `item` are already set in the block.
-    pub fn get(&self, item: &T) -> bool {
-        self.hash(item).iter().all(|ix| self.bits.get(*ix))
     }
 }
 

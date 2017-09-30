@@ -12,21 +12,23 @@ use rand;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std;
-use super::standard::StandardBloom;
-use super::index_mask::index_mask;
-use super::hash_until::hash_until;
+use standard::StandardBloom;
+use index_mask::index_mask;
+use hash_until::hash_until;
+
+pub use bloom::{BloomFilter,BloomFilterCreate};
 
 /// A representation of a BlockedBloom filter.
 ///
 /// ```
-/// use baffles::blocked::{BlockedBloom,DefaultBlockedBloom};
+/// use baffles::blocked::*;
 ///
 /// let expected_set_size = 1024 * 1024;
 /// let bits_per_item = 16;
 /// let hashing_algos = (bits_per_item as f32 * 0.7).ceil() as usize;
 /// let block_count = 8;
 ///
-/// let mut dbb: DefaultBlockedBloom<usize> = BlockedBloom::new(
+/// let mut dbb: DefaultBlockedBloom<usize> = BlockedBloom::new_with_blocks(
 ///     expected_set_size,
 ///     bits_per_item,
 ///     hashing_algos,
@@ -56,6 +58,30 @@ impl<H, T> fmt::Debug for BlockedBloom<H, T> {
     }
 }
 
+impl<H: Hasher + Default, T: Hash> BloomFilterCreate<T> for BlockedBloom<H, T> {
+    fn new(n: usize, c: usize, k: usize) -> Self {
+        // The math below caps the size of each block at 64K.
+        let m = n as f64 * c as f64;
+        let max_block_size = 64f64 * 1024f64;
+        let block_count = (m / max_block_size).ceil() as usize;
+
+        BlockedBloom::new_with_blocks(n, c, k, block_count)
+    }
+}
+
+impl<H: Hasher + Default, T: Hash> BloomFilter<T> for BlockedBloom<H, T> {
+    fn set(&mut self, item: &T) {
+        let idx = self.block_idx(item);
+        self.blocks[idx].set(item);
+    }
+
+    fn get(&self, item: &T) -> bool {
+        let idx = self.block_idx(item);
+        self.blocks[idx].get(item)
+    }
+}
+
+
 impl<H: Hasher + Default, T: Hash> BlockedBloom<H, T> {
     /// Create a new blocked bloom filter.
     ///
@@ -81,7 +107,7 @@ impl<H: Hasher + Default, T: Hash> BlockedBloom<H, T> {
     ///
     /// assert!(fp(1000.0, 16.0, 4.0) > 0.0);
     /// ```
-    pub fn new(n: usize, c: usize, k: usize, b: usize) -> Self {
+    pub fn new_with_blocks(n: usize, c: usize, k: usize, b: usize) -> Self {
         assert!(n > 0);
         assert!(c > 0);
         assert!(k > 0);
@@ -113,20 +139,6 @@ impl<H: Hasher + Default, T: Hash> BlockedBloom<H, T> {
                 })
                 .collect(),
         }
-    }
-
-    /// Set the bits for `item` in the filter.
-    pub fn set(&mut self, item: &T) {
-        // Set the bits for the item in the specified block.
-        let idx = self.block_idx(item);
-        self.blocks[idx].set(item);
-    }
-
-    /// True if the bits for `item` are already set in the filter.
-    pub fn get(&self, item: &T) -> bool {
-        // Set the bits for the item in the specified block.
-        let idx = self.block_idx(item);
-        self.blocks[idx].get(item)
     }
 
     /// Determine a block index from an item. The block index for a
@@ -206,7 +218,7 @@ mod tests {
 
     #[test]
     fn it_should_have_standard_behavior_for_block_count_1() {
-        let mut bb: DefaultBlockedBloom<usize> = BlockedBloom::new(N, C, k(), 1);
+        let mut bb: DefaultBlockedBloom<usize> = BlockedBloom::new_with_blocks(N, C, k(), 1);
         insert_n(&mut bb, N);
 
         let fpos = test_n_to_m(&bb, N, N * 2) as f64;
@@ -224,7 +236,8 @@ mod tests {
 
     #[test]
     fn it_should_have_standard_behavior_for_block_count_16() {
-        let mut bb: BlockedBloom<DefaultHasher, usize> = BlockedBloom::new(N, C, k(), 16);
+        let mut bb: BlockedBloom<DefaultHasher, usize> =
+            BlockedBloom::new_with_blocks(N, C, k(), 16);
         insert_n(&mut bb, N);
 
         let fpos = test_n_to_m(&bb, N, N * 2) as f64;
@@ -242,7 +255,8 @@ mod tests {
 
     #[test]
     fn it_should_have_standard_behavior_for_block_count_500() {
-        let mut bb: BlockedBloom<DefaultHasher, usize> = BlockedBloom::new(N, C, k(), 500);
+        let mut bb: BlockedBloom<DefaultHasher, usize> =
+            BlockedBloom::new_with_blocks(N, C, k(), 500);
         insert_n(&mut bb, N);
 
         let fpos = test_n_to_m(&bb, N, N * 2) as f64;

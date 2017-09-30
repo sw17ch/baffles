@@ -6,3 +6,4 @@ mod index_mask;
 
 pub mod standard;
 pub mod blocked;
+pub mod bloom;
