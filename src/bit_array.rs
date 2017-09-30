@@ -93,7 +93,7 @@ mod tests {
     #[should_panic]
     fn test_set_out_of_range() {
         let mut ba = BitArray::new(1);
-        ba.set_to(1,true);
+        ba.set_to(1, true);
     }
 
     #[test]
