@@ -22,11 +22,14 @@ pub trait BloomFilter<T: Hash> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use blocked::{DefaultBlockedBloom};
-    use standard::{DefaultStandardBloom};
+    use blocked::DefaultBlockedBloom;
+    use standard::DefaultStandardBloom;
 
     fn ns() -> Vec<usize> {
-        vec![1 * 1024, 10 * 1024, 1000 * 1024]
+        vec![1, 10, 1000, 10_000, 100_000]
+            .iter()
+            .map(|i| i * 1024usize)
+            .collect()
     }
 
     fn k(c: f32) -> usize {
@@ -50,9 +53,17 @@ mod tests {
     #[test]
     fn test_all() {
         for mut b in bs() {
-            assert!(!b.get(&500));
-            b.set(&500);
-            assert!(b.get(&500));
+            let n = 1000;
+
+            for i in 0..n {
+                assert!(!b.get(&i));
+            }
+            for i in 0..n {
+                b.set(&i);
+            }
+            for i in 0..n {
+                assert!(b.get(&i));
+            }
         }
     }
 }
