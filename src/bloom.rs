@@ -1,6 +1,14 @@
 //! A trait defining a bloom filter.
 
 use std::hash::Hash;
+use std::f32;
+
+
+/// Get an optimal number of hashing functions to use from a given
+/// number of bits per set member.
+pub fn optimal_hashers(c: usize) -> usize {
+    (c as f32 * 2.0f32.ln()).ceil() as usize
+}
 
 /// Bloom filters all need to support get and set operations.
 pub trait BloomFilter<T: Hash> {
@@ -9,6 +17,7 @@ pub trait BloomFilter<T: Hash> {
 
     /// True if the bits for `item` in the BloomFilter are all set.
     fn get(&self, item: &T) -> bool;
+
 }
 
 #[cfg(test)]
@@ -24,13 +33,9 @@ mod tests {
             .collect()
     }
 
-    fn k(c: f32) -> usize {
-        (c * 0.7).ceil() as usize
-    }
-
     fn bs<T: 'static + Hash>() -> Vec<Box<BloomFilter<T>>> {
         let c = 16;
-        let k = k(c as f32);
+        let k = optimal_hashers(c);
 
         let mut bs: Vec<Box<BloomFilter<T>>> = vec![];
 
