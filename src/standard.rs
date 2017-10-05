@@ -14,7 +14,7 @@ use bit_array::BitArray;
 use index_mask::index_mask;
 use hash_until::hash_until;
 
-pub use bloom::{BloomFilter,BloomFilterCreate};
+pub use bloom::BloomFilter;
 
 /// A representation of a StandardBloom filter.
 ///
@@ -62,14 +62,7 @@ impl<H, T> fmt::Debug for StandardBloom<H, T> {
     }
 }
 
-impl<H: Hasher + Default, T: Hash> BloomFilterCreate<T> for StandardBloom<H,T> {
-    fn new(n: usize, c: usize, k: usize) -> Self {
-        let mut rng = rand::thread_rng();
-        StandardBloom::new_with_seeds(n, c, k, rng.gen::<u64>(), rng.gen::<u64>())
-    }
-}
-
-impl<H: Hasher + Default, T: Hash> BloomFilter<T> for StandardBloom<H,T> {
+impl<H: Hasher + Default, T: Hash> BloomFilter<T> for StandardBloom<H, T> {
     fn set(&mut self, item: &T) {
         for ix in self.hash(item) {
             self.bits.set(ix);
@@ -82,9 +75,16 @@ impl<H: Hasher + Default, T: Hash> BloomFilter<T> for StandardBloom<H,T> {
 }
 
 impl<H: Hasher + Default, T: Hash> StandardBloom<H, T> {
-    /// Create a new StandardBloom filter that will use `k` hashing
-    /// functions, `seed1` and `seed2` to derive those hashing
-    /// functions, and space for `bits` bits.
+    /// Create a new StandardBloom filter that with an approximate set
+    /// size of `n`, uses `c` bits per member, and `k` hashing
+    /// functions.
+    pub fn new(n: usize, c: usize, k: usize) -> Self {
+        let mut rng = rand::thread_rng();
+        StandardBloom::new_with_seeds(n, c, k, rng.gen::<u64>(), rng.gen::<u64>())
+    }
+
+    /// Like `new`, but allows the specification of the seeds to use
+    /// for the hashers.
     pub fn new_with_seeds(
         n: usize,
         c: usize,

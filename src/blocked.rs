@@ -16,7 +16,7 @@ use standard::StandardBloom;
 use index_mask::index_mask;
 use hash_until::hash_until;
 
-pub use bloom::{BloomFilter,BloomFilterCreate};
+pub use bloom::BloomFilter;
 
 /// A representation of a BlockedBloom filter.
 ///
@@ -28,7 +28,7 @@ pub use bloom::{BloomFilter,BloomFilterCreate};
 /// let hashing_algos = (bits_per_item as f32 * 0.7).ceil() as usize;
 /// let block_count = 8;
 ///
-/// let mut dbb: DefaultBlockedBloom<usize> = BlockedBloom::new_with_blocks(
+/// let mut dbb: DefaultBlockedBloom<usize> = BlockedBloom::new(
 ///     expected_set_size,
 ///     bits_per_item,
 ///     hashing_algos,
@@ -55,17 +55,6 @@ pub struct BlockedBloom<H, T> {
 impl<H, T> fmt::Debug for BlockedBloom<H, T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "BlockedBloom {{ blocks: {:?} }}", self.blocks)
-    }
-}
-
-impl<H: Hasher + Default, T: Hash> BloomFilterCreate<T> for BlockedBloom<H, T> {
-    fn new(n: usize, c: usize, k: usize) -> Self {
-        // The math below caps the size of each block at 64K.
-        let m = n as f64 * c as f64;
-        let max_block_size = 64f64 * 1024f64;
-        let block_count = (m / max_block_size).ceil() as usize;
-
-        BlockedBloom::new_with_blocks(n, c, k, block_count)
     }
 }
 
@@ -107,7 +96,7 @@ impl<H: Hasher + Default, T: Hash> BlockedBloom<H, T> {
     ///
     /// assert!(fp(1000.0, 16.0, 4.0) > 0.0);
     /// ```
-    pub fn new_with_blocks(n: usize, c: usize, k: usize, b: usize) -> Self {
+    pub fn new(n: usize, c: usize, k: usize, b: usize) -> Self {
         assert!(n > 0);
         assert!(c > 0);
         assert!(k > 0);
@@ -218,7 +207,7 @@ mod tests {
 
     #[test]
     fn it_should_have_standard_behavior_for_block_count_1() {
-        let mut bb: DefaultBlockedBloom<usize> = BlockedBloom::new_with_blocks(N, C, k(), 1);
+        let mut bb: DefaultBlockedBloom<usize> = BlockedBloom::new(N, C, k(), 1);
         insert_n(&mut bb, N);
 
         let fpos = test_n_to_m(&bb, N, N * 2) as f64;
@@ -236,8 +225,7 @@ mod tests {
 
     #[test]
     fn it_should_have_standard_behavior_for_block_count_16() {
-        let mut bb: BlockedBloom<DefaultHasher, usize> =
-            BlockedBloom::new_with_blocks(N, C, k(), 16);
+        let mut bb: BlockedBloom<DefaultHasher, usize> = BlockedBloom::new(N, C, k(), 16);
         insert_n(&mut bb, N);
 
         let fpos = test_n_to_m(&bb, N, N * 2) as f64;
@@ -255,8 +243,7 @@ mod tests {
 
     #[test]
     fn it_should_have_standard_behavior_for_block_count_500() {
-        let mut bb: BlockedBloom<DefaultHasher, usize> =
-            BlockedBloom::new_with_blocks(N, C, k(), 500);
+        let mut bb: BlockedBloom<DefaultHasher, usize> = BlockedBloom::new(N, C, k(), 500);
         insert_n(&mut bb, N);
 
         let fpos = test_n_to_m(&bb, N, N * 2) as f64;
