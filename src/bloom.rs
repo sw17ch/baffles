@@ -13,10 +13,10 @@ pub fn optimal_hashers(c: usize) -> usize {
 /// Bloom filters all need to support get and set operations.
 pub trait BloomFilter<T: Hash> {
     /// Set the bits for `item` in the BloomFilter.
-    fn set(&mut self, item: &T);
+    fn mark(&mut self, item: &T);
 
     /// True if the bits for `item` in the BloomFilter are all set.
-    fn get(&self, item: &T) -> bool;
+    fn check(&self, item: &T) -> bool;
 
 }
 
@@ -53,13 +53,13 @@ mod tests {
             let n = 1000;
 
             for i in 0..n {
-                assert!(!b.get(&i));
+                assert!(!b.check(&i));
             }
             for i in 0..n {
-                b.set(&i);
+                b.mark(&i);
             }
             for i in 0..n {
-                assert!(b.get(&i));
+                assert!(b.check(&i));
             }
         }
     }

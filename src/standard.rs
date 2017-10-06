@@ -30,9 +30,9 @@ pub use bloom::BloomFilter;
 ///     bits_per_item,
 ///     hashing_algos);
 ///
-/// assert!(!dbb.get(&100));
-/// dbb.set(&100);
-/// assert!(dbb.get(&100));
+/// assert!(!dbb.check(&100));
+/// dbb.mark(&100);
+/// assert!(dbb.check(&100));
 /// ```
 pub struct StandardBloom<H, T> {
     /// The number of hashing functions to use. This also happens to
@@ -63,13 +63,13 @@ impl<H, T> fmt::Debug for StandardBloom<H, T> {
 }
 
 impl<H: Hasher + Default, T: Hash> BloomFilter<T> for StandardBloom<H, T> {
-    fn set(&mut self, item: &T) {
+    fn mark(&mut self, item: &T) {
         for ix in self.hash(item) {
             self.bits.set(ix);
         }
     }
 
-    fn get(&self, item: &T) -> bool {
+    fn check(&self, item: &T) -> bool {
         self.hash(item).iter().all(|ix| self.bits.get(*ix))
     }
 }
@@ -195,12 +195,12 @@ mod tests {
 
     fn insert_n(bb: &mut DefaultStandardBloom<usize>, n: usize) {
         for i in 0..n {
-            bb.set(&i);
+            bb.mark(&i);
         }
     }
 
     fn test_n_to_m(bb: &DefaultStandardBloom<usize>, n: usize, m: usize) -> usize {
-        (n..m).fold(0, |acc, v| if bb.get(&v) { acc + 1 } else { acc })
+        (n..m).fold(0, |acc, v| if bb.check(&v) { acc + 1 } else { acc })
     }
 
     #[test]

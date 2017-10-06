@@ -34,9 +34,9 @@ pub use bloom::BloomFilter;
 ///     hashing_algos,
 ///     block_count);
 ///
-/// assert!(!dbb.get(&100));
-/// dbb.set(&100);
-/// assert!(dbb.get(&100));
+/// assert!(!dbb.check(&100));
+/// dbb.mark(&100);
+/// assert!(dbb.check(&100));
 /// ```
 pub struct BlockedBloom<H, T> {
     /// The blocks in this blocked bloom filter are just StandardBloom
@@ -59,14 +59,14 @@ impl<H, T> fmt::Debug for BlockedBloom<H, T> {
 }
 
 impl<H: Hasher + Default, T: Hash> BloomFilter<T> for BlockedBloom<H, T> {
-    fn set(&mut self, item: &T) {
+    fn mark(&mut self, item: &T) {
         let idx = self.block_idx(item);
-        self.blocks[idx].set(item);
+        self.blocks[idx].mark(item);
     }
 
-    fn get(&self, item: &T) -> bool {
+    fn check(&self, item: &T) -> bool {
         let idx = self.block_idx(item);
-        self.blocks[idx].get(item)
+        self.blocks[idx].check(item)
     }
 }
 
@@ -197,12 +197,12 @@ mod tests {
 
     fn insert_n(bb: &mut DefaultBlockedBloom<usize>, n: usize) {
         for i in 0..n {
-            bb.set(&i);
+            bb.mark(&i);
         }
     }
 
     fn test_n_to_m(bb: &DefaultBlockedBloom<usize>, n: usize, m: usize) -> usize {
-        (n..m).fold(0, |acc, v| if bb.get(&v) { acc + 1 } else { acc })
+        (n..m).fold(0, |acc, v| if bb.check(&v) { acc + 1 } else { acc })
     }
 
     #[test]
