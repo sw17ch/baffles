@@ -173,25 +173,8 @@ impl<H: Hasher + Default, T: Hash> StandardBloom<H, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bloom::{optimal_hashers,false_positive_probability};
     use std::collections::hash_map::DefaultHasher;
-
-    // Number of hashing algorithms to use.
-    fn k(c: usize) -> usize {
-        (c as f32 * 0.7).ceil() as usize
-    }
-
-    // Natural logarithm.
-    fn e() -> f64 {
-        1.0f64.exp()
-    }
-
-    // Expected false positive rate.
-    fn fp(n: usize, c: usize) -> f64 {
-        let k = k(c) as f64;
-        let m = (n * c) as f64;
-
-        (1f64 - e().powf((-k * n as f64) / m)).powf(k)
-    }
 
     fn insert_n(bb: &mut DefaultStandardBloom<usize>, n: usize) {
         for i in 0..n {
@@ -207,12 +190,13 @@ mod tests {
     fn it_should_have_standard_behavior_for_n_count_10_000() {
         let n: usize = 10_000;
         let c: usize = 16;
-        let mut bb: DefaultStandardBloom<usize> = StandardBloom::new(n, c, k(c));
+        let k = optimal_hashers(c);
+        let mut bb: DefaultStandardBloom<usize> = StandardBloom::new(n, c, k);
         insert_n(&mut bb, n);
 
         let fpos = test_n_to_m(&bb, n, n * 2) as f64;
         let false_positive_rate = fpos / n as f64;
-        let fp_val = fp(n, c);
+        let fp_val = false_positive_probability(n, c, k);
 
         println!(
             "false positive rate: {:.7}. expected {:.7}.",
@@ -228,12 +212,14 @@ mod tests {
     fn it_should_have_standard_behavior_for_n_count_16_000() {
         let n: usize = 16_000;
         let c: usize = 16;
-        let mut bb: StandardBloom<DefaultHasher, usize> = StandardBloom::new(n, c, k(c));
+        let k = optimal_hashers(c);
+        let mut bb: StandardBloom<DefaultHasher, usize> =
+            StandardBloom::new(n, c, optimal_hashers(c));
         insert_n(&mut bb, n);
 
         let fpos = test_n_to_m(&bb, n, n * 2) as f64;
         let false_positive_rate = fpos / n as f64;
-        let fp_val = fp(n, c);
+        let fp_val = false_positive_probability(n, c, k);
 
         println!(
             "false positive rate: {:.7}. expected {:.7}.",
@@ -249,13 +235,14 @@ mod tests {
     fn it_should_have_standard_behavior_for_n_count_500_000() {
         let n: usize = 500_000;
         let c: usize = 16;
-        let mut bb: StandardBloom<DefaultHasher, usize> = StandardBloom::new(n, c, k(c));
+        let k = optimal_hashers(c);
+        let mut bb: StandardBloom<DefaultHasher, usize> =
+            StandardBloom::new(n, c, optimal_hashers(c));
         insert_n(&mut bb, n);
 
         let fpos = test_n_to_m(&bb, n, n * 2) as f64;
         let false_positive_rate = fpos / n as f64;
-
-        let fp_val = fp(n, c);
+        let fp_val = false_positive_probability(n, c, k);
 
         println!(
             "false positive rate: {:.7}. expected {:.7}.",
