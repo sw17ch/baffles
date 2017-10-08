@@ -3,7 +3,6 @@
 use std::hash::Hash;
 use std::f32;
 
-
 /// Get an optimal number of hashing functions to use from a given
 /// number of bits per set member.
 pub fn optimal_hashers(c: usize) -> usize {
@@ -28,6 +27,15 @@ pub trait BloomFilter<T: Hash> {
 
     /// True if the bits for `item` in the BloomFilter are all set.
     fn check(&self, item: &T) -> bool;
+
+    /// The estimated set size of the BloomFilter.
+    fn set_size(&self) -> usize;
+
+    /// The number of bits per member in the BloomFilter.
+    fn bits_per_member(&self) -> usize;
+
+    /// The number of hashing functions used.
+    fn hash_count(&self) -> usize;
 }
 
 #[cfg(test)]
@@ -35,42 +43,51 @@ mod tests {
     use super::*;
     use blocked::DefaultBlockedBloom;
     use standard::DefaultStandardBloom;
+    use std::ops::DerefMut;
 
-    fn ns() -> Vec<usize> {
-        vec![1, 10, 1000, 10_000, 100_000]
-            .iter()
-            .map(|i| i * 1024usize)
-            .collect()
-    }
-
-    fn bs<T: 'static + Hash>() -> Vec<Box<BloomFilter<T>>> {
+    fn bs(n: usize) -> Vec<Box<BloomFilter<usize>>> {
         let c = 16;
         let k = optimal_hashers(c);
 
-        let mut bs: Vec<Box<BloomFilter<T>>> = vec![];
+        vec![
+            Box::new(DefaultStandardBloom::new(n, c, k)),
+            Box::new(DefaultBlockedBloom::new(n, c, k, 2)),
+            Box::new(DefaultBlockedBloom::new(n, c, k, 16)),
+        ]
+    }
 
-        for n in ns() {
-            bs.push(Box::new(DefaultStandardBloom::new(n, c, k)));
-            bs.push(Box::new(DefaultBlockedBloom::new(n, c, k, 2)));
+    fn has_standard_behavior(bf: &mut BloomFilter<usize>) -> bool {
+        let n = bf.set_size();
+        let c = bf.bits_per_member();
+        let k = bf.hash_count();
+        let fp = false_positive_probability(n, c, k);
+
+        for i in 0..n {
+            bf.mark(&i);
         }
 
-        bs
+        let false_positives =
+            (n..(n * 2)).fold(0, |acc, v| if bf.check(&v) { acc + 1 } else { acc });
+        let false_positive_ratio = false_positives as f64 / n as f64;
+
+        let double_fp = fp * 2.0;
+
+        println!("{}: {:.7} > {:.7}", n, double_fp, false_positive_ratio);
+
+        double_fp > false_positive_ratio
     }
 
     #[test]
-    fn test_all() {
-        for mut b in bs() {
-            let n = 1000;
+    fn test_standard_for_10k() {
+        for mut b in bs(10 * 1024) {
+            assert!(has_standard_behavior(b.deref_mut()));
+        }
+    }
 
-            for i in 0..n {
-                assert!(!b.check(&i));
-            }
-            for i in 0..n {
-                b.mark(&i);
-            }
-            for i in 0..n {
-                assert!(b.check(&i));
-            }
+    #[test]
+    fn test_standard_for_100k() {
+        for mut b in bs(100 * 1024) {
+            assert!(has_standard_behavior(b.deref_mut()));
         }
     }
 }

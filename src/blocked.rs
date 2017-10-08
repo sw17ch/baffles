@@ -50,6 +50,15 @@ pub struct BlockedBloom<H, T> {
     /// of blocks in the filter. This value will probably be larger
     /// than blocks.len().
     mask: u64,
+
+    /// The estimated set size.
+    n: usize,
+
+    /// The number of bits per member.
+    c: usize,
+
+    /// The number of hashing functions.
+    k: usize,
 }
 
 impl<H, T> fmt::Debug for BlockedBloom<H, T> {
@@ -67,6 +76,18 @@ impl<H: Hasher + Default, T: Hash> BloomFilter<T> for BlockedBloom<H, T> {
     fn check(&self, item: &T) -> bool {
         let idx = self.block_idx(item);
         self.blocks[idx].check(item)
+    }
+
+    fn set_size(&self) -> usize {
+        self.n
+    }
+
+    fn bits_per_member(&self) -> usize {
+        self.c
+    }
+
+    fn hash_count(&self) -> usize {
+        self.k
     }
 }
 
@@ -113,6 +134,10 @@ impl<H: Hasher + Default, T: Hash> BlockedBloom<H, T> {
         let mut rng = rand::thread_rng();
 
         BlockedBloom {
+            n: n,
+            c: c,
+            k: k,
+
             hasher_seed: rng.gen::<u64>(),
             mask: index_mask(max_block_index as u64),
 
@@ -164,85 +189,15 @@ pub type DefaultBlockedBloom<T> = BlockedBloom<std::collections::hash_map::Defau
 
 #[cfg(test)]
 mod tests {
+    use bloom::optimal_hashers;
     use super::*;
-    use bloom::{optimal_hashers,false_positive_probability};
-    use std::collections::hash_map::DefaultHasher;
-
-    // Expected set size.
-    const N: usize = 128 * 1024;
-
-    // Bits per element.
-    const C: usize = 16;
-
-    fn insert_n(bb: &mut DefaultBlockedBloom<usize>, n: usize) {
-        for i in 0..n {
-            bb.mark(&i);
-        }
-    }
-
-    fn test_n_to_m(bb: &DefaultBlockedBloom<usize>, n: usize, m: usize) -> usize {
-        (n..m).fold(0, |acc, v| if bb.check(&v) { acc + 1 } else { acc })
-    }
 
     #[test]
-    fn it_should_have_standard_behavior_for_block_count_1() {
-        let k = optimal_hashers(C);
-        let mut bb: DefaultBlockedBloom<usize> = BlockedBloom::new(N, C, k, 1);
-        insert_n(&mut bb, N);
-
-        let fpos = test_n_to_m(&bb, N, N * 2) as f64;
-        let n = N as f64;
-        let false_positive_rate = fpos / n;
-        let fp = false_positive_probability(N, C, k);
-
-        println!(
-            "false positive rate: {:.7}. expected {:.7}.",
-            false_positive_rate,
-            fp
-        );
-
-        assert!(fp * 2.0 > false_positive_rate);
-    }
-
-    #[test]
-    fn it_should_have_standard_behavior_for_block_count_16() {
-        let k = optimal_hashers(C);
-        let mut bb: BlockedBloom<DefaultHasher, usize> =
-            BlockedBloom::new(N, C, k, 16);
-        insert_n(&mut bb, N);
-
-        let fpos = test_n_to_m(&bb, N, N * 2) as f64;
-        let n = N as f64;
-        let false_positive_rate = fpos / n;
-        let fp = false_positive_probability(N, C, k);
-
-        println!(
-            "false positive rate: {:.7}. expected {:.7}.",
-            false_positive_rate,
-            fp
-        );
-
-        assert!(fp * 2.0 > false_positive_rate);
-    }
-
-    #[test]
-    fn it_should_have_standard_behavior_for_block_count_500() {
-        let k = optimal_hashers(C);
-        let mut bb: BlockedBloom<DefaultHasher, usize> =
-            BlockedBloom::new(N, C, optimal_hashers(C), 500);
-        insert_n(&mut bb, N);
-
-        let fpos = test_n_to_m(&bb, N, N * 2) as f64;
-        let n = N as f64;
-        let false_positive_rate = fpos / n;
-        let fp = false_positive_probability(N, C, k);
-
-        println!(
-            "false positive rate: {:.7}. expected {:.7}.",
-            false_positive_rate,
-            fp
-        );
-
-        assert!(fp * 2.0 > false_positive_rate);
+    fn the_basics_work() {
+        let mut bb: DefaultBlockedBloom<usize> =
+            BlockedBloom::new(1024 * 1024, 16, optimal_hashers(16), 4);
+        assert!(!bb.check(&100));
+        bb.mark(&100);
+        assert!(bb.check(&100));
     }
 }

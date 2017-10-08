@@ -50,6 +50,12 @@ pub struct StandardBloom<H, T> {
     /// A mask to help select a random bit index.
     mask: u64,
 
+    /// The estimated set size.
+    n: usize,
+
+    /// The number of bits per member.
+    c: usize,
+
     _p_hasher: PhantomData<H>,
     _p_type: PhantomData<T>,
 }
@@ -71,6 +77,18 @@ impl<H: Hasher + Default, T: Hash> BloomFilter<T> for StandardBloom<H, T> {
 
     fn check(&self, item: &T) -> bool {
         self.hash(item).iter().all(|ix| self.bits.get(*ix))
+    }
+
+    fn set_size(&self) -> usize {
+        self.n
+    }
+
+    fn bits_per_member(&self) -> usize {
+        self.c
+    }
+
+    fn hash_count(&self) -> usize {
+        self.k
     }
 }
 
@@ -99,6 +117,8 @@ impl<H: Hasher + Default, T: Hash> StandardBloom<H, T> {
 
         let max_bit_index = bits - 1;
         StandardBloom {
+            n: n,
+            c: c,
             k: k,
 
             seed1: seed1,
@@ -172,85 +192,15 @@ impl<H: Hasher + Default, T: Hash> StandardBloom<H, T> {
 
 #[cfg(test)]
 mod tests {
+    use bloom::optimal_hashers;
     use super::*;
-    use bloom::{optimal_hashers,false_positive_probability};
-    use std::collections::hash_map::DefaultHasher;
-
-    fn insert_n(bb: &mut DefaultStandardBloom<usize>, n: usize) {
-        for i in 0..n {
-            bb.mark(&i);
-        }
-    }
-
-    fn test_n_to_m(bb: &DefaultStandardBloom<usize>, n: usize, m: usize) -> usize {
-        (n..m).fold(0, |acc, v| if bb.check(&v) { acc + 1 } else { acc })
-    }
 
     #[test]
-    fn it_should_have_standard_behavior_for_n_count_10_000() {
-        let n: usize = 10_000;
-        let c: usize = 16;
-        let k = optimal_hashers(c);
-        let mut bb: DefaultStandardBloom<usize> = StandardBloom::new(n, c, k);
-        insert_n(&mut bb, n);
-
-        let fpos = test_n_to_m(&bb, n, n * 2) as f64;
-        let false_positive_rate = fpos / n as f64;
-        let fp_val = false_positive_probability(n, c, k);
-
-        println!(
-            "false positive rate: {:.7}. expected {:.7}.",
-            false_positive_rate,
-            fp_val
-        );
-
-        println!("fp() = {}, fpr = {}", fp_val, false_positive_rate);
-        assert!(fp_val * 3.0 > false_positive_rate);
-    }
-
-    #[test]
-    fn it_should_have_standard_behavior_for_n_count_16_000() {
-        let n: usize = 16_000;
-        let c: usize = 16;
-        let k = optimal_hashers(c);
-        let mut bb: StandardBloom<DefaultHasher, usize> =
-            StandardBloom::new(n, c, optimal_hashers(c));
-        insert_n(&mut bb, n);
-
-        let fpos = test_n_to_m(&bb, n, n * 2) as f64;
-        let false_positive_rate = fpos / n as f64;
-        let fp_val = false_positive_probability(n, c, k);
-
-        println!(
-            "false positive rate: {:.7}. expected {:.7}.",
-            false_positive_rate,
-            fp_val
-        );
-
-        println!("fp() = {}, fpr = {}", fp_val, false_positive_rate);
-        assert!(fp_val * 3.0 > false_positive_rate);
-    }
-
-    #[test]
-    fn it_should_have_standard_behavior_for_n_count_500_000() {
-        let n: usize = 500_000;
-        let c: usize = 16;
-        let k = optimal_hashers(c);
-        let mut bb: StandardBloom<DefaultHasher, usize> =
-            StandardBloom::new(n, c, optimal_hashers(c));
-        insert_n(&mut bb, n);
-
-        let fpos = test_n_to_m(&bb, n, n * 2) as f64;
-        let false_positive_rate = fpos / n as f64;
-        let fp_val = false_positive_probability(n, c, k);
-
-        println!(
-            "false positive rate: {:.7}. expected {:.7}.",
-            false_positive_rate,
-            fp_val
-        );
-
-        println!("fp() = {}, fpr = {}", fp_val, false_positive_rate);
-        assert!(fp_val * 3.0 > false_positive_rate);
+    fn the_basics_work() {
+        let mut bb: DefaultStandardBloom<usize> =
+            StandardBloom::new(1024 * 1024, 16, optimal_hashers(16));
+        assert!(!bb.check(&100));
+        bb.mark(&100);
+        assert!(bb.check(&100));
     }
 }
