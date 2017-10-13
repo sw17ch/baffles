@@ -74,6 +74,10 @@ impl<H, T> fmt::Debug for BlockedBloom<H, T> {
 }
 
 impl<H: Hasher + Default, T: Hash> BloomFilter<T> for BlockedBloom<H, T> {
+    fn name(&self) -> &str {
+        "blocked"
+    }
+
     fn mark(&mut self, item: &T) {
         let idx = self.block_idx(item);
 

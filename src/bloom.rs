@@ -22,6 +22,11 @@ pub fn false_positive_probability(n: usize, c: usize, k: usize) -> f64 {
 
 /// Bloom filters all need to support get and set operations.
 pub trait BloomFilter<T: Hash> {
+    /// The implementation name of the bloom filter.
+    fn name(&self) -> &str {
+        ""
+    }
+
     /// Set the bits for `item` in the BloomFilter.
     fn mark(&mut self, item: &T);
 

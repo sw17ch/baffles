@@ -69,6 +69,10 @@ impl<H, T> fmt::Debug for StandardBloom<H, T> {
 }
 
 impl<H: Hasher + Default, T: Hash> BloomFilter<T> for StandardBloom<H, T> {
+    fn name(&self) -> &str {
+        "standard"
+    }
+
     fn mark(&mut self, item: &T) {
         for ix in self.hash(item) {
             self.bits.set(ix);
