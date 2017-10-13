@@ -28,9 +28,9 @@ let mut dbb: DefaultStandardBloom<usize> = StandardBloom::new(
     bits_per_item,
     hashing_algos);
 
-assert!(!dbb.get(&100));
-dbb.set(&100);
-assert!(dbb.get(&100));
+assert!(!dbb.check(&100));
+dbb.mark(&100);
+assert!(dbb.check(&100));
 ```
 
 ### Blocked Bloom Filter
@@ -52,7 +52,7 @@ let mut dbb: DefaultBlockedBloom<usize> = BlockedBloom::new(
     hashing_algos,
     block_count);
 
-assert!(!dbb.get(&100));
-dbb.set(&100);
-assert!(dbb.get(&100));
+assert!(!dbb.check(&100));
+dbb.mark(&100);
+assert!(dbb.check(&100));
 ```
