@@ -5,7 +5,7 @@ use baffles::standard::DefaultStandardBloom;
 use baffles::blocked::DefaultBlockedBloom;
 
 #[derive(Debug)]
-struct Result {
+struct RunResult {
     name: String,
 
     n: usize,
@@ -16,28 +16,38 @@ struct Result {
 }
 
 fn main() {
-    let n = 100 * 1024;
-    let c = 21;
+    let n = 10 * 1024;
+    let c = 12;
     let k = optimal_hashers(c);
-    let b = 8;
+    let b = 16;
 
-    let standard_runs = (0..10).map(|_| run(&mut DefaultStandardBloom::new(n, c, k)));
-    let blocked_runs = (0..10).map(|_| run(&mut DefaultBlockedBloom::new(n, c, k, b)));
+    let runs = 20;
 
-    for r in standard_runs.chain(blocked_runs) {
+    let def_standard_runs = (0..runs).map(|_| run(&mut DefaultStandardBloom::new(n, c, k)));
+    let def_blocked_runs = (0..runs).map(|_| run(&mut DefaultBlockedBloom::new(n, c, k, b)));
+
+    let c = def_standard_runs.chain(def_blocked_runs);
+
+    for r in c {
+        let fp = r.false_positives as f64 / r.n as f64;
+        let fpp = false_positive_probability(r.n, r.c, r.k);
+
+        let abs_diff = fp - fpp;
+
         println!(
-            "{}: {} out of {} checks were false positives. \
-             This rate is {:.7} with an expected rate of {:.7}.",
+            "{:>10}: {:5} out of {} checks were false positives. \
+             This rate is {:.7} with an expected rate of {:.7}. (diff: {:>+12.7})",
             r.name,
             r.false_positives,
             r.n,
-            r.false_positives as f32 / r.n as f32,
-            false_positive_probability(r.n, r.c, r.k)
+            fp,
+            fpp,
+            abs_diff,
         );
     }
 }
 
-fn run(bf: &mut BloomFilter<usize>) -> Result {
+fn run<B: BloomFilter<usize>>(bf: &mut B) -> RunResult {
     let n = bf.set_size();
     let c = bf.bits_per_member();
     let k = bf.hash_count();
@@ -68,7 +78,7 @@ fn run(bf: &mut BloomFilter<usize>) -> Result {
         if bf.check(&v) { acc + 1 } else { acc }
     });
 
-    Result {
+    RunResult {
         name: bf.name().to_string(),
         n: n,
         c: c,
