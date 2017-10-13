@@ -145,6 +145,8 @@ impl<H: Hasher + Default, T: Hash> BlockedBloom<H, T> {
         assert!(k > 0);
         assert!(b > 0);
 
+        assert!(k <= c);
+
         // Ideally, N insertions divide evenly into B. The number of
         // bits we use for each B should be (N/B * C).
 

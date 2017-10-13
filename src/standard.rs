@@ -117,6 +117,8 @@ impl<H: Hasher + Default, T: Hash> StandardBloom<H, T> {
         assert!(k > 0);
         assert!(n * c > 0);
 
+        assert!(k <= c);
+
         let bits = n * c;
 
         let max_bit_index = bits - 1;
