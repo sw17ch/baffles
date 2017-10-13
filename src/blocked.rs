@@ -7,14 +7,14 @@
 //! a number of Standard Bloom Filters that able to more-easily fit
 //! into the machine cache.
 
+use hash_until::hash_until;
+use index_mask::index_mask;
 use rand::Rng;
 use rand;
+use standard::StandardBloom;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std;
-use standard::StandardBloom;
-use index_mask::index_mask;
-use hash_until::hash_until;
 
 pub use bloom::BloomFilter;
 
@@ -41,7 +41,7 @@ pub use bloom::BloomFilter;
 pub struct BlockedBloom<H, T> {
     /// The blocks in this blocked bloom filter are just StandardBloom
     /// filters.
-    blocks: Vec<StandardBloom<H, T>>,
+    blocks: Vec<Option<Box<StandardBloom<H, T>>>>,
 
     /// The block-selection hasher seed to use.
     hasher_seed: u64,
@@ -51,6 +51,9 @@ pub struct BlockedBloom<H, T> {
     /// than blocks.len().
     mask: u64,
 
+    /// The RNG used to generate differnet seeds.
+    rng: rand::ThreadRng,
+
     /// The estimated set size.
     n: usize,
 
@@ -59,6 +62,9 @@ pub struct BlockedBloom<H, T> {
 
     /// The number of hashing functions.
     k: usize,
+
+    /// The number of N used for each block.
+    n_per_block: usize,
 }
 
 impl<H, T> fmt::Debug for BlockedBloom<H, T> {
@@ -70,12 +76,25 @@ impl<H, T> fmt::Debug for BlockedBloom<H, T> {
 impl<H: Hasher + Default, T: Hash> BloomFilter<T> for BlockedBloom<H, T> {
     fn mark(&mut self, item: &T) {
         let idx = self.block_idx(item);
-        self.blocks[idx].mark(item);
+
+        if self.blocks[idx].is_none() {
+            let new_block = create_block(self.n_per_block, self.c, self.k, &mut self.rng);
+            self.blocks[idx] = Some(new_block);
+        }
+
+        match self.blocks[idx].as_mut() {
+            Some(b) => b.mark(item),
+            None => panic!("This should never happen."),
+        }
     }
 
     fn check(&self, item: &T) -> bool {
         let idx = self.block_idx(item);
-        self.blocks[idx].check(item)
+
+        match &self.blocks[idx] {
+            &Some(ref b) => b.check(item),
+            &None => false,
+        }
     }
 
     fn set_size(&self) -> usize {
@@ -90,7 +109,6 @@ impl<H: Hasher + Default, T: Hash> BloomFilter<T> for BlockedBloom<H, T> {
         self.k
     }
 }
-
 
 impl<H: Hasher + Default, T: Hash> BlockedBloom<H, T> {
     /// Create a new blocked bloom filter.
@@ -126,10 +144,7 @@ impl<H: Hasher + Default, T: Hash> BlockedBloom<H, T> {
         // Ideally, N insertions divide evenly into B. The number of
         // bits we use for each B should be (N/B * C).
 
-        let n_per_block = (n as f32 / b as f32).ceil() as usize;
         let max_block_index = b - 1;
-
-        assert!(n_per_block >= 1);
 
         let mut rng = rand::thread_rng();
 
@@ -138,20 +153,14 @@ impl<H: Hasher + Default, T: Hash> BlockedBloom<H, T> {
             c: c,
             k: k,
 
+            n_per_block: (n as f32 / b as f32).ceil() as usize,
+
             hasher_seed: rng.gen::<u64>(),
             mask: index_mask(max_block_index as u64),
 
-            blocks: (0..b)
-                .map(|_| {
-                    StandardBloom::new_with_seeds(
-                        n_per_block,
-                        c,
-                        k,
-                        rng.gen::<u64>(),
-                        rng.gen::<u64>(),
-                    )
-                })
-                .collect(),
+            rng: rng,
+
+            blocks: (0..b).map(|_| None).collect(),
         }
     }
 
@@ -186,6 +195,25 @@ impl<H: Hasher + Default, T: Hash> BlockedBloom<H, T> {
 
 /// A BlockedBloom filter that uses the DefaultHasher.
 pub type DefaultBlockedBloom<T> = BlockedBloom<std::collections::hash_map::DefaultHasher, T>;
+
+fn create_block<H, T>(
+    n_per_block: usize,
+    c: usize,
+    k: usize,
+    rng: &mut rand::ThreadRng,
+) -> Box<StandardBloom<H, T>>
+where
+    H: Hasher + Default,
+    T: Hash,
+{
+    Box::new(StandardBloom::new_with_seeds(
+        n_per_block,
+        c,
+        k,
+        rng.gen::<u64>(),
+        rng.gen::<u64>(),
+    ))
+}
 
 #[cfg(test)]
 mod tests {
